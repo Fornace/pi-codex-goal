@@ -179,6 +179,37 @@ Omit `token_budget` for an unlimited goal. New explicit budgets must be integers
 
 `get_goal` returns the current goal state and usage.
 
+### Increasing a budget while continuing the same work
+
+In version 0.3.0, budget changes use `create_goal` with
+`replace_existing: true`. There is no in-place budget setter or `/goal budget`
+command. Replacement starts an active tracker with a new goal ID and zeroed
+usage counters; engineering files and commits remain unchanged.
+
+To add tokens while retaining cumulative accounting:
+
+1. If the goal is active, use `/goal pause`, then call `get_goal` to capture
+   stable usage. Record the existing objective, goal ID, budget, consumed
+   tokens and active elapsed time.
+2. Obtain explicit approval to replace the tracker while continuing the same
+   objective. A request for more budget should not silently erase accounting.
+3. Calculate the replacement budget as
+   `old_budget + additional_tokens - old_tokens_used`. For example, a 10M
+   allocation with 9M consumed plus another 50M gives a **51M replacement
+   budget**, representing a **60M cumulative allocation**. Explicit replacement
+   budgets must still meet the 500,000-token minimum.
+4. Call `create_goal` with the same objective, `replace_existing: true`, and
+   that remaining budget. Append an accounting note identifying the previous
+   tracker and its consumed tokens and elapsed time. Preserve all unfinished
+   requirements and evidence; this operation does not complete the goal.
+5. Call `get_goal` to verify the new active tracker and its allocation.
+
+The footer reports the replacement tracker's counters. Cumulative consumed
+usage is the carried-forward usage plus the new tracker's `tokensUsed`;
+calculate cumulative active time the same way. Keep these separate from
+whole-session billing, whose accounting scope is described below. An unlimited
+existing goal already has no token ceiling.
+
 `update_goal` only accepts `status: "complete"`, matching Codex's model-side contract. Calling it on an already-complete goal is idempotent and does not append duplicate session entries. The extension reports final token and elapsed-time usage before marking the goal complete.
 
 Completed goals are terminal for automatic transitions: pause, resume, and hidden continuations do not reopen them. To recover from premature completion, use `/goal <objective>` to replace the goal, call `create_goal` with `replace_existing: true`, or `/goal clear` before starting again.
