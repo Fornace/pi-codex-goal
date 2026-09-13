@@ -3,7 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { budgetLimitPrompt } from "./prompts.js";
 import { applyUsage } from "./state.js";
 import { CUSTOM_ENTRY_TYPE, type ThreadGoal } from "./types.js";
-import { parseSubagentUsageReceipt, receiptFromEntry, receiptTokens } from "./subagent-usage.js";
+import { parseSubagentUsageReceipt, receiptTokens } from "./subagent-usage.js";
 
 export interface AccountingState {
   activeGoalId: string | null;
@@ -144,18 +144,10 @@ export function createGoalAccounting(deps: GoalAccountingDeps) {
     }
   };
 
-  const reconcileSubagentUsage = (ctx: ExtensionContext): void => {
-    for (const entry of ctx.sessionManager.getBranch()) {
-      const receipt = receiptFromEntry(entry);
-      if (receipt) accountSubagentUsage(ctx, receipt);
-    }
-  };
-
   return {
     clearActiveAccounting,
     beginAccounting,
     accountProgress,
     accountSubagentUsage,
-    reconcileSubagentUsage,
   };
 }

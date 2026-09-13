@@ -13,6 +13,7 @@ import {
   type SessionEntryLike,
   type ThreadGoal,
 } from "./types.js";
+import { receiptFromEntry, receiptTokens } from "./subagent-usage.js";
 
 export const MIN_TOKEN_BUDGET = 500_000;
 
@@ -220,8 +221,19 @@ function canApplyRuntimeUsageEntry(goal: ThreadGoal | null, entry: Extract<GoalC
 
 export function reconstructGoal(entries: Iterable<SessionEntryLike>): GoalSnapshot {
   let goal: ThreadGoal | null = null;
+  const appliedChildReceipts = new Set<string>();
 
   for (const entry of entries) {
+    const receipt = receiptFromEntry(entry);
+    if (receipt && goal?.goalId === receipt.goalId && !appliedChildReceipts.has(receipt.receiptId)) {
+      appliedChildReceipts.add(receipt.receiptId);
+      goal = cloneGoal(goal);
+      goal.usage.tokensUsed = Math.min(Number.MAX_SAFE_INTEGER, goal.usage.tokensUsed + receiptTokens(receipt));
+      goal.status = statusAfterBudgetLimit(goal.status, goal.usage.tokensUsed, goal.tokenBudget);
+      goal.updatedAt = Math.max(goal.updatedAt, Math.floor(receipt.at / 1000));
+      continue;
+    }
+
     if (entry.type !== "custom" || entry.customType !== CUSTOM_ENTRY_TYPE) {
       continue;
     }
