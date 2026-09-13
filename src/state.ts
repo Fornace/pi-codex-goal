@@ -13,6 +13,7 @@ import {
   type SessionEntryLike,
   type ThreadGoal,
 } from "./types.js";
+import { receiptFromEntry, receiptTokens } from "./subagent-usage.js";
 
 export const MIN_TOKEN_BUDGET = 500_000;
 
@@ -102,7 +103,7 @@ export function setEntry(goal: ThreadGoal, source: GoalEntrySource, at = unixSec
   };
 }
 
-export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds()): GoalCustomEntry {
+export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds(), receiptId?: string): GoalCustomEntry {
   if (!isRuntimeUsageGoalStatus(goal.status)) {
     throw new Error(`Cannot persist ${goal.status} goal as runtime usage entry.`);
   }
@@ -114,6 +115,7 @@ export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds()): GoalCus
     status: goal.status,
     usage: cloneUsage(goal.usage),
     updatedAt: goal.updatedAt,
+    ...(receiptId ? { receiptId } : {}),
     at,
   };
 }
@@ -158,7 +160,8 @@ export function isGoalCustomEntry(data: unknown): data is GoalCustomEntry {
       typeof entry.goalId === "string" &&
       isRuntimeUsageGoalStatus(entry.status) &&
       isGoalUsage(entry.usage) &&
-      typeof entry.updatedAt === "number"
+      typeof entry.updatedAt === "number" &&
+      (entry.receiptId === undefined || /^[a-f0-9]{64}$/.test(entry.receiptId))
     );
   }
   if (entry.kind === "host_overflow_cap_reset") {
@@ -218,8 +221,19 @@ function canApplyRuntimeUsageEntry(goal: ThreadGoal | null, entry: Extract<GoalC
 
 export function reconstructGoal(entries: Iterable<SessionEntryLike>): GoalSnapshot {
   let goal: ThreadGoal | null = null;
+  const appliedChildReceipts = new Set<string>();
 
   for (const entry of entries) {
+    const receipt = receiptFromEntry(entry);
+    if (receipt && goal?.goalId === receipt.goalId && !appliedChildReceipts.has(receipt.receiptId)) {
+      appliedChildReceipts.add(receipt.receiptId);
+      goal = cloneGoal(goal);
+      goal.usage.tokensUsed = Math.min(Number.MAX_SAFE_INTEGER, goal.usage.tokensUsed + receiptTokens(receipt));
+      goal.status = statusAfterBudgetLimit(goal.status, goal.usage.tokensUsed, goal.tokenBudget);
+      goal.updatedAt = Math.max(goal.updatedAt, Math.floor(receipt.at / 1000));
+      continue;
+    }
+
     if (entry.type !== "custom" || entry.customType !== CUSTOM_ENTRY_TYPE) {
       continue;
     }

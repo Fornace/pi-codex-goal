@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
+import { createAutonomyGuard } from "./autonomy-guard.js";
 import { registerGoalCommand } from "./commands.js";
 import { createContinuationScheduler } from "./continuation-scheduler.js";
 import { createGoalAccounting } from "./goal-accounting.js";
@@ -39,6 +40,15 @@ export interface GoalRuntimeController extends GoalRuntimeEventHandlers {
 export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeController {
   const runtimeState = createGoalRuntimeState();
   const persistence = createGoalPersistence({ pi });
+  const autonomy = createAutonomyGuard(pi, {
+    active: () => persistence.getGoal()?.status === "active",
+    pause: (ctx, reason) => stateController.pauseForRecovery(ctx, reason),
+    clear: () => {
+      continuation.clearContinuationState();
+      continuation.clearPostCompactContinuationFallback();
+      providerLimitAutoResume.clear();
+    },
+  });
 
   const clearActiveAccounting = (): void => {
     runtimeState.accounting.activeGoalId = null;
@@ -57,6 +67,7 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
     );
 
   let autoResumeContext: ExtensionContext | null = null;
+  let runtimeContext: ExtensionContext | null = null;
   const providerLimitAutoResume = createProviderLimitAutoResumeScheduler({
     onTimer(goalId) {
       if (!autoResumeContext || !autoResumeContext.isIdle() || autoResumeContext.hasPendingMessages()) {
@@ -81,6 +92,8 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
     staleQueuedWorkGuard: runtimeState.staleQueuedWorkGuard,
     getCurrentTurnIndex: () => runtimeState.currentTurnIndex,
     getAgentRunSequence: () => runtimeState.agentRunSequence,
+    canContinue: autonomy.allowed,
+    reserveContinuation: autonomy.reserve,
   });
 
   const stateController = createGoalStateController({
@@ -109,10 +122,16 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
   const goalAccounting = createGoalAccounting({
     getGoal: () => stateController.getGoal(),
     getAccounting: () => runtimeState.accounting,
-    applyRuntimeAccountingTransition(ctx, nextGoal) {
-      stateController.applyGoalTransition({ kind: "runtime_accounting", nextGoal }, ctx);
+    applyRuntimeAccountingTransition(ctx, nextGoal, receiptId) {
+      const request = receiptId
+        ? { kind: "runtime_accounting" as const, nextGoal, receiptId }
+        : { kind: "runtime_accounting" as const, nextGoal };
+      stateController.applyGoalTransition(request, ctx);
     },
     sendMessage: pi.sendMessage.bind(pi),
+  });
+  pi.events.on("subagent:usage", data => {
+    if (runtimeContext) goalAccounting.accountSubagentUsage(runtimeContext, data);
   });
 
   const recoveryRuntime = createGoalRecoveryRuntime({
@@ -139,6 +158,9 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
     const result = updateGoalStatus(stateController.getGoal(), "active");
     if (!result.ok || !result.goal || result.goal.goalId !== goalId) {
       return result;
+    }
+    if (!autonomy.reserve()) {
+      return { ok: false, message: "Goal autonomy blocked. Inspect /goal-guard status.", goal: stateController.getGoal() };
     }
     providerLimitAutoResume.clear();
     stateController.resumePausedGoal(ctx);
@@ -170,9 +192,25 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
   };
 
   return {
+    ...eventHandlers,
     getGoalForDisplay: goalForDisplay,
     getGoalStartTurnStrategy: () => goalStartTurnStrategy(runtimeState.recoveryState.phase),
+    onSessionStart(event, ctx) {
+      runtimeContext = ctx;
+      return eventHandlers.onSessionStart(event, ctx);
+    },
+    onSessionTree(event, ctx) {
+      runtimeContext = ctx;
+      return eventHandlers.onSessionTree(event, ctx);
+    },
+    async onSessionShutdown(event, ctx) {
+      try { return await eventHandlers.onSessionShutdown(event, ctx); }
+      finally { runtimeContext = null; }
+    },
     setGoal(nextGoal, source, ctx) {
+      autonomy.bind(ctx);
+      if (source === "command" && nextGoal.status === "paused") autonomy.brake("Explicit goal pause");
+      providerLimitAutoResume.clear();
       providerLimitAutoResume.clear();
       stateController.applyGoalTransition({ kind: "set", nextGoal, source }, ctx);
     },
@@ -181,12 +219,12 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
       stateController.applyGoalTransition({ kind: "clear", source }, ctx);
     },
     cancelProviderLimitAutoResume(_goalId, ctx) {
+      autonomy.brake("Explicit resume cancellation");
       providerLimitAutoResume.clear();
       status.refreshUi(ctx);
     },
     completeGoal,
     resumeGoalWithContinuation,
-    ...eventHandlers,
   };
 }
 

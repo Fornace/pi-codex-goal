@@ -1,14 +1,15 @@
 {
   "name": "pi-codex-goal",
-  "version": "0.3.0",
-  "description": "Codex-style goal tracking and continuation for pi.",
+  "version": "0.3.1-fornace.1",
+  "description": "Fornace goal tracking with guarded autonomous continuation and preserved owner budgets.",
   "type": "module",
   "author": "Mitch Fultz (https://github.com/fitchmultz)",
   "license": "MIT",
   "main": "dist/index.js",
   "files": [
     "dist",
-    "extensions/index.js",
+    "src",
+    "extensions/index.ts",
     "docs",
     "scripts",
     "AGENTS.md",
@@ -29,15 +30,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fitchmultz/pi-codex-goal.git"
+    "url": "git+https://github.com/Fornace/pi-codex-goal.git"
   },
   "bugs": {
-    "url": "https://github.com/fitchmultz/pi-codex-goal/issues"
+    "url": "https://github.com/Fornace/pi-codex-goal/issues"
   },
-  "homepage": "https://github.com/fitchmultz/pi-codex-goal#readme",
+  "homepage": "https://github.com/Fornace/pi-codex-goal#readme",
   "pi": {
     "extensions": [
-      "./extensions"
+      "./extensions/index.ts"
     ],
     "prompts": [
       "./prompts"

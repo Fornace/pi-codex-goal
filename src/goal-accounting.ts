@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { budgetLimitPrompt } from "./prompts.js";
 import { applyUsage } from "./state.js";
 import { CUSTOM_ENTRY_TYPE, type ThreadGoal } from "./types.js";
+import { parseSubagentUsageReceipt, receiptTokens } from "./subagent-usage.js";
 
 export interface AccountingState {
   activeGoalId: string | null;
@@ -54,7 +55,7 @@ export function isToolUseAssistantMessage(message: AssistantTurnMessage): boolea
 interface GoalAccountingDeps {
   getGoal: () => ThreadGoal | null;
   getAccounting: () => AccountingState;
-  applyRuntimeAccountingTransition: (ctx: ExtensionContext, nextGoal: ThreadGoal) => void;
+  applyRuntimeAccountingTransition: (ctx: ExtensionContext, nextGoal: ThreadGoal, receiptId?: string) => void;
   sendMessage: ExtensionAPI["sendMessage"];
 }
 
@@ -120,9 +121,33 @@ export function createGoalAccounting(deps: GoalAccountingDeps) {
     }
   };
 
+  const accountSubagentUsage = (ctx: ExtensionContext, data: unknown): void => {
+    const receipt = parseSubagentUsageReceipt(data);
+    const goal = deps.getGoal();
+    if (!receipt || receipt.sessionId !== ctx.sessionManager.getSessionId() ||
+        !goal || receipt.goalId !== goal.goalId || !["active", "budgetLimited"].includes(goal.status)) return;
+    const consumed = ctx.sessionManager.getBranch().some(entry =>
+      entry.type === "custom" && entry.customType === CUSTOM_ENTRY_TYPE &&
+      (entry.data as { kind?: string; receiptId?: string })?.kind === "usage" &&
+      (entry.data as { receiptId?: string }).receiptId === receipt.receiptId);
+    if (consumed) return;
+    const result = applyUsage(goal, receiptTokens(receipt), 0, {
+      expectedGoalId: receipt.goalId,
+      accountBudgetLimited: true,
+    });
+    if (!result.changed || !result.goal) return;
+    deps.applyRuntimeAccountingTransition(ctx, result.goal, receipt.receiptId);
+    if (result.crossedBudget && deps.getAccounting().budgetWarningSentFor !== result.goal.goalId) {
+      deps.getAccounting().budgetWarningSentFor = result.goal.goalId;
+      deps.sendMessage({ customType: CUSTOM_ENTRY_TYPE, content: budgetLimitPrompt(result.goal), display: false,
+        details: { kind: "budget_limit", goalId: result.goal.goalId } }, { triggerTurn: true, deliverAs: "steer" });
+    }
+  };
+
   return {
     clearActiveAccounting,
     beginAccounting,
     accountProgress,
+    accountSubagentUsage,
   };
 }

@@ -17,6 +17,8 @@ interface ContinuationSchedulerDeps {
   staleQueuedWorkGuard: StaleQueuedWorkGuard;
   getCurrentTurnIndex: () => number | null;
   getAgentRunSequence: () => number;
+  canContinue?: (ctx: ExtensionContext) => boolean;
+  reserveContinuation?: (ctx: ExtensionContext) => boolean;
 }
 
 interface PostCompactContinuationOptions {
@@ -162,6 +164,7 @@ export function createContinuationScheduler(deps: ContinuationSchedulerDeps) {
   };
 
   const maybeContinue = (ctx: ExtensionContext): void => {
+    if (deps.canContinue && !deps.canContinue(ctx)) return;
     const goal = deps.getGoal();
     if (!canPlanContinuationFor(goal)) {
       return;
@@ -178,10 +181,12 @@ export function createContinuationScheduler(deps: ContinuationSchedulerDeps) {
     if (!currentGoal || currentGoal.status !== "active" || currentGoal.goalId !== goalId) {
       return;
     }
+    if (deps.reserveContinuation && !deps.reserveContinuation(ctx)) return;
     sendContinuation(currentGoal);
   };
 
   const maybeContinueAfterCurrentEvent = (ctx: ExtensionContext): void => {
+    if (deps.canContinue && !deps.canContinue(ctx)) return;
     const goal = deps.getGoal();
     if (!canPlanContinuationFor(goal)) {
       return;
@@ -205,6 +210,7 @@ export function createContinuationScheduler(deps: ContinuationSchedulerDeps) {
     options: PostCompactContinuationOptions,
   ): void => {
     clearPostCompactContinuationFallback();
+    if (deps.canContinue && !deps.canContinue(ctx)) return;
     const goal = deps.getGoal();
     if (!canSchedulePostCompactFallbackFor(goal, options.prepareContinuation)) {
       return;
@@ -213,6 +219,7 @@ export function createContinuationScheduler(deps: ContinuationSchedulerDeps) {
     const goalId = goal.goalId;
     const runFallback = (): void => {
       postCompactContinuationTimer = null;
+      if (deps.canContinue && !deps.canContinue(ctx)) return;
       const currentGoal = deps.getGoal();
       if (!currentGoal || currentGoal.status !== "active" || currentGoal.goalId !== goalId) {
         return;

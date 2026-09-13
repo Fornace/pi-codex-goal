@@ -31,10 +31,10 @@ test("package exposes source and compiled runtime plus create-goal prompt entryp
   };
 
   assert.equal(packageJson.main, "dist/index.js");
-  assert.deepEqual(packageJson.pi?.extensions, ["./extensions"]);
+  assert.deepEqual(packageJson.pi?.extensions, ["./extensions/index.ts"]);
   assert.ok(packageJson.files?.includes("dist"));
-  assert.ok(packageJson.files?.includes("extensions/index.js"));
-  assert.equal(packageJson.files?.includes("src"), false);
+  assert.ok(packageJson.files?.includes("extensions/index.ts"));
+  assert.equal(packageJson.files?.includes("src"), true);
   assert.equal(packageJson.scripts?.prepack, "npm run build");
   assert.ok(packageJson.files?.includes("prompts"));
   assert.ok(packageJson.pi?.prompts?.includes("./prompts"));

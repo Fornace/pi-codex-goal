@@ -9,7 +9,6 @@ import type {
 import { continuationGoalIdFromPrompt } from "./prompts.js";
 import { applyQueuedGoalProviderContextRewrites, extensionQueuedGoalWorkMessageId } from "./queued-goal-work.js";
 import {
-  isActiveGoalQueuedDetails,
   isCommandResumeQueuedGoalMessage,
 } from "./queued-goal-messages.js";
 import { applyStaleQueuedWorkEffects } from "./goal-runtime-event-utils.js";
@@ -123,11 +122,6 @@ export function createInputContextEventHandlers(
       continuation.clearContinuationStateFor(queuedGoalId);
       if (stateController.isCurrentActiveGoalId(queuedGoalId)) {
         runtimeState.staleQueuedWorkGuard.noteRunnableWorkStarted();
-        const details =
-          "details" in event.message ? (event.message as { details?: unknown }).details : undefined;
-        if (isActiveGoalQueuedDetails(details) && details.kind === "continuation") {
-          runtimeState.agentRunFromContinuation = true;
-        }
         if (isCommandResumeQueuedGoalMessage(event.message)) {
           resetErrorRecovery();
         }
