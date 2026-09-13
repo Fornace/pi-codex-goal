@@ -84,6 +84,8 @@ export interface GoalAccountingPort {
     forceFlush?: boolean,
   ) => void;
   beginAccounting: () => void;
+  accountSubagentUsage: (ctx: ExtensionContext, data: unknown) => void;
+  reconcileSubagentUsage: (ctx: ExtensionContext) => void;
 }
 
 export interface RecoveryRuntimePort {

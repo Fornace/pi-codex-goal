@@ -38,6 +38,7 @@ export type GoalCustomEntry =
 			status: RuntimeUsageGoalStatus;
 			usage: GoalUsage;
 			updatedAt: number;
+			receiptId?: string;
 			at: number;
 	  }
 	| {

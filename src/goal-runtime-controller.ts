@@ -67,6 +67,7 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
     );
 
   let autoResumeContext: ExtensionContext | null = null;
+  let runtimeContext: ExtensionContext | null = null;
   const providerLimitAutoResume = createProviderLimitAutoResumeScheduler({
     onTimer(goalId) {
       if (!autoResumeContext || !autoResumeContext.isIdle() || autoResumeContext.hasPendingMessages()) {
@@ -121,10 +122,16 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
   const goalAccounting = createGoalAccounting({
     getGoal: () => stateController.getGoal(),
     getAccounting: () => runtimeState.accounting,
-    applyRuntimeAccountingTransition(ctx, nextGoal) {
-      stateController.applyGoalTransition({ kind: "runtime_accounting", nextGoal }, ctx);
+    applyRuntimeAccountingTransition(ctx, nextGoal, receiptId) {
+      const request = receiptId
+        ? { kind: "runtime_accounting" as const, nextGoal, receiptId }
+        : { kind: "runtime_accounting" as const, nextGoal };
+      stateController.applyGoalTransition(request, ctx);
     },
     sendMessage: pi.sendMessage.bind(pi),
+  });
+  pi.events.on("subagent:usage", data => {
+    if (runtimeContext) goalAccounting.accountSubagentUsage(runtimeContext, data);
   });
 
   const recoveryRuntime = createGoalRecoveryRuntime({
@@ -185,8 +192,21 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
   };
 
   return {
+    ...eventHandlers,
     getGoalForDisplay: goalForDisplay,
     getGoalStartTurnStrategy: () => goalStartTurnStrategy(runtimeState.recoveryState.phase),
+    onSessionStart(event, ctx) {
+      runtimeContext = ctx;
+      return eventHandlers.onSessionStart(event, ctx);
+    },
+    onSessionTree(event, ctx) {
+      runtimeContext = ctx;
+      return eventHandlers.onSessionTree(event, ctx);
+    },
+    async onSessionShutdown(event, ctx) {
+      try { return await eventHandlers.onSessionShutdown(event, ctx); }
+      finally { runtimeContext = null; }
+    },
     setGoal(nextGoal, source, ctx) {
       autonomy.bind(ctx);
       if (source === "command" && nextGoal.status === "paused") autonomy.brake("Explicit goal pause");
@@ -205,7 +225,6 @@ export function createGoalRuntimeController(pi: ExtensionAPI): GoalRuntimeContro
     },
     completeGoal,
     resumeGoalWithContinuation,
-    ...eventHandlers,
   };
 }
 

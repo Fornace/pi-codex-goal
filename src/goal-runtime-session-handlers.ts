@@ -61,6 +61,7 @@ export function createSessionEventHandlers(deps: GoalRuntimeSessionHandlerContex
       continuation.clearPostCompactContinuationFallback();
       deps.providerLimitAutoResume.clear();
       stateController.reloadFromSession(ctx);
+      goalAccounting.reconcileSubagentUsage(ctx);
       goalAccounting.beginAccounting();
       const goal = stateController.getGoal();
       const pausedGoal = goal?.status === "paused" ? goal : null;
@@ -82,6 +83,7 @@ export function createSessionEventHandlers(deps: GoalRuntimeSessionHandlerContex
       continuation.clearPostCompactContinuationFallback();
       deps.providerLimitAutoResume.clear();
       stateController.reloadFromSession(ctx);
+      goalAccounting.reconcileSubagentUsage(ctx);
       goalAccounting.beginAccounting();
       continuation.maybeContinue(ctx);
     }) satisfies ExtensionHandler<SessionTreeEvent>,

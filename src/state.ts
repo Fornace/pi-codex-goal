@@ -102,7 +102,7 @@ export function setEntry(goal: ThreadGoal, source: GoalEntrySource, at = unixSec
   };
 }
 
-export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds()): GoalCustomEntry {
+export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds(), receiptId?: string): GoalCustomEntry {
   if (!isRuntimeUsageGoalStatus(goal.status)) {
     throw new Error(`Cannot persist ${goal.status} goal as runtime usage entry.`);
   }
@@ -114,6 +114,7 @@ export function runtimeUsageEntry(goal: ThreadGoal, at = unixSeconds()): GoalCus
     status: goal.status,
     usage: cloneUsage(goal.usage),
     updatedAt: goal.updatedAt,
+    ...(receiptId ? { receiptId } : {}),
     at,
   };
 }
@@ -158,7 +159,8 @@ export function isGoalCustomEntry(data: unknown): data is GoalCustomEntry {
       typeof entry.goalId === "string" &&
       isRuntimeUsageGoalStatus(entry.status) &&
       isGoalUsage(entry.usage) &&
-      typeof entry.updatedAt === "number"
+      typeof entry.updatedAt === "number" &&
+      (entry.receiptId === undefined || /^[a-f0-9]{64}$/.test(entry.receiptId))
     );
   }
   if (entry.kind === "host_overflow_cap_reset") {

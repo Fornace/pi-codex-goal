@@ -32,10 +32,12 @@ export type GoalTransitionRequest =
   | {
       kind: "runtime_accounting";
       nextGoal: ThreadGoal;
+      receiptId?: string;
     };
 
 type GoalTransitionPlanBase = {
   source: GoalEntrySource;
+  receiptId?: string;
   beforePersist: GoalTransitionEffect[];
   afterPersist: GoalTransitionEffect[];
 };
@@ -348,14 +350,15 @@ export function planGoalTransition(
       );
 
     case "runtime_accounting": {
-      const { nextGoal } = request;
+      const { nextGoal, receiptId } = request;
       validateRuntimeAccounting(current, nextGoal);
       const beforePersist = memoryEffectsFromGoalChange(current, nextGoal);
-      if (crossedBudgetTransition(current, nextGoal)) {
+      if (receiptId || crossedBudgetTransition(current, nextGoal)) {
         return {
           persist: "set",
           nextGoal,
           source: "runtime",
+          ...(receiptId ? { receiptId } : {}),
           beforePersist,
           afterPersist: [],
         };

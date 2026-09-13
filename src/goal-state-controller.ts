@@ -94,7 +94,7 @@ export function createGoalStateController(deps: GoalStateControllerDeps) {
     }
 
     deps.persistence.setGoalSnapshot(plan.nextGoal);
-    const persisted = deps.persistence.flushGoalPersistence(plan.source);
+    const persisted = deps.persistence.flushGoalPersistence(plan.source, plan.receiptId);
     applyGoalTransitionEffects(plan.afterPersist, deps.transitionEffectHandlers);
     if (ctx) {
       deps.refreshUi(ctx);

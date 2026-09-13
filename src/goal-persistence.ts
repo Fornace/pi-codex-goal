@@ -43,7 +43,7 @@ export function createGoalPersistence(deps: GoalPersistenceDeps) {
     lastRuntimePersistAt = null;
   };
 
-  const flushGoalPersistence = (source: GoalEntrySource): boolean => {
+  const flushGoalPersistence = (source: GoalEntrySource, receiptId?: string): boolean => {
     if (!goal) {
       return false;
     }
@@ -54,7 +54,7 @@ export function createGoalPersistence(deps: GoalPersistenceDeps) {
     deps.pi.appendEntry(
       CUSTOM_ENTRY_TYPE,
       source === "runtime" && canPersistRuntimeUsageEntry(goal, lastPersistedGoal)
-        ? runtimeUsageEntry(goal)
+        ? runtimeUsageEntry(goal, undefined, receiptId)
         : setEntry(goal, source),
     );
     lastPersistedGoal = cloneGoal(goal);
