@@ -200,13 +200,13 @@ test("local source stays authoritative when build output is present", async (t) 
   await checkPackage(root, packageRoot, ".ts");
 });
 
-test("npm artifact discovers and executes one compiled goal extension without source or local peers", async (t) => {
+test("npm artifact discovers and executes one source goal extension without local peers", async (t) => {
   const root = tempRoot(t);
   const packs = Object.values(JSON.parse(run("npm", ["pack", "--json", "--pack-destination", root], process.cwd()))) as Array<{ filename: string }>;
   assert.ok(packs[0]);
   run("tar", ["-xzf", join(root, packs[0].filename), "-C", root], process.cwd());
   const packageRoot = join(root, "package");
-  assert.equal(existsSync(join(packageRoot, "src")), false);
+  assert.equal(existsSync(join(packageRoot, "src")), true);
   assert.equal(existsSync(join(packageRoot, "node_modules")), false);
-  await checkPackage(root, packageRoot, ".js");
+  await checkPackage(root, packageRoot, ".ts");
 });

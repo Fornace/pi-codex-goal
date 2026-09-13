@@ -339,11 +339,14 @@ try {
 test("npm pack includes platform smoke docs and scripts", () => {
   const result = run("npm", ["pack", "--dry-run", "--json"]);
   assert.equal(result.status, 0, result.stderr);
-  const packs = JSON.parse(result.stdout) as Array<{ files: Array<{ path: string }> }>;
-  const paths = new Set(packs[0]?.files.map((file) => file.path) ?? []);
+  const packs = Object.values(JSON.parse(result.stdout)) as Array<{ files: Array<{ path: string }> }>;
+  assert.equal(packs.length, 1, "npm pack must describe exactly one package");
+  assert.ok(Array.isArray(packs[0]?.files), "npm pack must report its file inventory");
+  const paths = new Set(packs[0]!.files.map((file) => file.path));
   for (const path of [
     "dist/index.js",
-    "extensions/index.js",
+    "extensions/index.ts",
+    "src/index.ts",
     "dist/index.d.ts",
     "docs/platform-smoke.md",
     ".crabboxignore",
@@ -352,7 +355,7 @@ test("npm pack includes platform smoke docs and scripts", () => {
   ]) {
     assert.ok(paths.has(path), `expected npm pack to include ${path}`);
   }
-  for (const forbidden of [".artifacts/", ".crabbox/", ".debug/", ".env", ".env.", "src/", "extensions/index.ts"]) {
+  for (const forbidden of [".artifacts/", ".crabbox/", ".debug/", ".env", ".env.", "extensions/index.js"]) {
     assert.equal([...paths].some((path) => path === forbidden || path.startsWith(forbidden)), false);
   }
   assert.equal([...paths].some((path) => path.endsWith(".tgz")), false);

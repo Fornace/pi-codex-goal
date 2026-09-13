@@ -3,11 +3,9 @@ import { continuationGoalIdFromPrompt } from "./prompts.js";
 import { CUSTOM_ENTRY_TYPE } from "./types.js";
 
 const ENTRY = "goal-autonomy-guard";
-const TOKEN_LIMIT = 8_000_000;
-const CONTINUATION_LIMIT = 64;
 type Guard = { version: 1; paused: boolean; reason: string; continuations: number; resetAfter?: string | undefined };
 
-/** Independent of owner goal budgets. Resets require an explicit command, never a model tool. */
+/** Explicit brakes and shared runtime state. Goal budgets remain owned by the goal runtime. */
 export function createAutonomyGuard(pi: ExtensionAPI, deps: {
   active: () => boolean;
   pause: (ctx: ExtensionContext, reason: string) => void;
@@ -67,8 +65,6 @@ export function createAutonomyGuard(pi: ExtensionAPI, deps: {
     if (!ctx) return false;
     if (mechanical?.state === "compacting") { deps.clear(); return false; }
     if (mechanical?.state === "paused") pause(ctx, `Mantice guard: ${mechanical.reason}`);
-    if (tokens(ctx) >= TOKEN_LIMIT) pause(ctx, `Cache-inclusive allowance reached (${TOKEN_LIMIT} tokens)`);
-    if (state.continuations > CONTINUATION_LIMIT) pause(ctx, `Continuation allowance reached (${CONTINUATION_LIMIT})`);
     if (state.paused) { deps.pause(ctx, state.reason); return false; }
     return true;
   };
@@ -80,7 +76,12 @@ export function createAutonomyGuard(pi: ExtensionAPI, deps: {
     if (mechanical.state === "paused") pause(context, `Mantice guard: ${mechanical.reason}`);
   });
   pi.events.on("subagent:guard-paused", (data: unknown) => {
-    if (context) pause(context, `Child guard: ${(data as { reason: string }).reason}`);
+    if (!context) return;
+    const reason = (data as { reason: string }).reason;
+    // A failed child is local to that assignment. Keep the owner able to repair it.
+    pi.sendMessage({ customType: "goal-child-recovery", display: true,
+      content: `Child needs recovery: ${reason}. Inspect its saved result and repair the cause; continue independent work.`,
+    }, { triggerTurn: false });
   });
   pi.on("session_start", (_event, ctx) => { load(ctx); });
   pi.on("session_tree", (_event, ctx) => { load(ctx); });
@@ -110,7 +111,7 @@ export function createAutonomyGuard(pi: ExtensionAPI, deps: {
         state = { version: 1, paused: false, reason: "", continuations: 0, resetAfter: entries.at(-1)?.id };
         save();
       }
-      ctx.ui.notify(`Goal autonomy ${state.paused ? "paused: " + state.reason : "ready"}. ${tokens(ctx)}/${TOKEN_LIMIT} tokens, ${state.continuations}/${CONTINUATION_LIMIT} continuations.`);
+      ctx.ui.notify(`Goal autonomy ${state.paused ? "paused: " + state.reason : "ready"}. ${tokens(ctx)} cache-inclusive tokens, ${state.continuations} continuations.`);
     },
   });
   return {
@@ -118,10 +119,6 @@ export function createAutonomyGuard(pi: ExtensionAPI, deps: {
     allowed,
     reserve(ctx?: ExtensionContext) {
       if (!allowed(ctx)) return false;
-      if (state.continuations >= CONTINUATION_LIMIT) {
-        if (ctx ?? context) pause((ctx ?? context)!, `Continuation allowance reached (${CONTINUATION_LIMIT})`);
-        return false;
-      }
       state.continuations++;
       save();
       return true;
