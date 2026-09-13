@@ -6,8 +6,6 @@ import {
   handleAgentErrorMessage,
   recordAssistantContextOverflow,
   runStaleQueuedWorkPlan,
-  shouldPauseStatusInspectionOnlyContinuation,
-  STATUS_INSPECTION_ONLY_CONTINUATION_REASON,
 } from "./goal-runtime-event-utils.js";
 import type { GoalRuntimeAgentHandlerContext } from "./goal-runtime-event-handler-types.js";
 
@@ -17,8 +15,6 @@ export function createAgentEventHandlers(deps: GoalRuntimeAgentHandlerContext) {
   return {
     onAgentStart: (async () => {
       runtimeState.agentRunSequence += 1;
-      runtimeState.agentRunFromContinuation = false;
-      runtimeState.agentRunToolNames = [];
     }) satisfies ExtensionHandler<AgentStartEvent>,
 
     onAgentEnd: (async (event, ctx) => {
@@ -50,15 +46,6 @@ export function createAgentEventHandlers(deps: GoalRuntimeAgentHandlerContext) {
         .reverse()
         .find((message) => message.role === "assistant");
       if (lastAssistant && recordAssistantContextOverflow(lastAssistant, ctx, deps)) {
-        return;
-      }
-      if (
-        shouldPauseStatusInspectionOnlyContinuation(
-          runtimeState.agentRunFromContinuation,
-          runtimeState.agentRunToolNames,
-        )
-      ) {
-        stateController.pauseForRecovery(ctx, STATUS_INSPECTION_ONLY_CONTINUATION_REASON);
         return;
       }
       resetErrorRecovery();

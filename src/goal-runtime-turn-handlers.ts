@@ -5,7 +5,6 @@ import { isAssistantContextOverflow, isErrorAssistantMessage } from "./recovery.
 import {
   getContextWindow,
   runStaleQueuedWorkPlan,
-  shouldPauseStatusInspectionOnlyContinuation,
 } from "./goal-runtime-event-utils.js";
 import type {
   GoalRuntimeTurnHandlerContext,
@@ -29,7 +28,6 @@ export function createTurnEventHandlers(deps: GoalRuntimeTurnHandlerContext) {
         return;
       }
 
-      runtimeState.agentRunToolNames.push(event.toolName);
       goalAccounting.accountProgress(ctx, true, 0, true);
       stateController.maybeFlushRuntimePersistence("runtime");
     }) satisfies ExtensionHandler<ToolExecutionEndEvent>,
@@ -59,12 +57,8 @@ export function createTurnEventHandlers(deps: GoalRuntimeTurnHandlerContext) {
         stateController.beginOverflowRecovery(ctx);
         return;
       }
-      const suppressContinuation = shouldPauseStatusInspectionOnlyContinuation(
-        runtimeState.agentRunFromContinuation,
-        runtimeState.agentRunToolNames,
-      );
       recoveryRuntime.finishSuccessfulAssistantTurn(event.message, ctx, {
-        continueGoal: !isToolUseAssistantMessage(event.message) && !suppressContinuation,
+        continueGoal: !isToolUseAssistantMessage(event.message),
       });
     }) satisfies ExtensionHandler<TurnEndEvent>,
   };
