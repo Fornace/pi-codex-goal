@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Account managed and batch subagent input plus output in the active owner
+  goal through durable, deduplicated usage receipts.
+- Persist each child charge immediately and reconcile unmatched receipts on
+  session restore without double counting.
+
 ## 0.3.0 - 2026-09-07
 
 - Require new explicit goal token budgets to be integers of at least 500,000, including replacements. Smaller budgets are rejected rather than raised; omitted budgets remain unlimited and existing saved budgets stay unchanged.
